@@ -10,6 +10,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "input": "^1.0.1",
     "telegram": "^2.26.16"
   }

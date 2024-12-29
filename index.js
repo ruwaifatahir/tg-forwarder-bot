@@ -2,6 +2,14 @@ const { Api, TelegramClient } = require("telegram");
 const { StringSession } = require("telegram/sessions");
 const input = require("input");
 const { NewMessage } = require("telegram/events");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const genAI = new GoogleGenerativeAI("AIzaSyDF3K-96zajWW7VJEhhtlQFIMwSpMSvAOw");
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+  // systemInstruction:
+  //   "Your job is to convert the signal message into my signal message so it doesn't look same as that group.",
+});
 
 // Configuration
 const CONFIG = {
@@ -77,13 +85,25 @@ async function forwardMessage(client, message, sender) {
   }
 }
 
+async function generateModifiedMessage(originalMessage) {
+  try {
+    const prompt = `Original message: "${originalMessage}"
+        Please rewrite this message in a different way while keeping the same meaning. and only provide exact one message that I can forward to my group.`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+  } catch (error) {
+    logger.error("Failed to generate modified message:", error.message);
+    return originalMessage; // Fallback to original message if AI fails
+  }
+}
+
 async function sendAsNewMessage(client, message, sender) {
   try {
-    const messageText = `
-🔄 Forwarded from: ${message.chat.title}
-👤 Original sender: ${sender?.firstName || "Unknown"}
-📝 Message:
-${message.text}`;
+    const modifiedText = await generateModifiedMessage(message.text);
+
+    const messageText = `${modifiedText}`; // Just send the modified message
 
     await client.sendMessage(CONFIG.channels.target, {
       message: messageText,
@@ -153,6 +173,7 @@ async function main() {
   await listAllChannels(client);
 
   const validChannels = [];
+
   for (const channel of CONFIG.channels.source) {
     const channelInfo = await getChannelInfo(client, channel);
     if (channelInfo) validChannels.push(channel);

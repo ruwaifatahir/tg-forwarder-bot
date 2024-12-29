@@ -8,6 +8,7 @@ A Telegram bot that monitors source channels for specific keywords and forwards 
 - Telegram API credentials (API ID and Hash)
 - Google Gemini API key
 - Source and target channel IDs
+- Membership in source channels and admin rights in target channel
 
 ## Installation
 
@@ -56,13 +57,16 @@ npm start
 npm start
 ```
 
-
 2. First time setup:
    - Enter your phone number
    - Input the verification code sent to your Telegram
    - Optionally enter your 2FA password if enabled
+   - **Important**: Ensure you are:
+     - A member of all source channels you want to monitor
+     - An administrator in the target channel where messages will be forwarded
 
 The bot will now:
+
 - Monitor specified source channels
 - Forward messages containing keywords
 - Modify messages using AI before forwarding
@@ -71,6 +75,7 @@ The bot will now:
 ## Keywords
 
 Default keywords are configured in `index.js`:
+
 - crypto
 - bitcoin
 - eth

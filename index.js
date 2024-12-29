@@ -2,102 +2,36 @@ const { Api, TelegramClient } = require("telegram");
 const { StringSession } = require("telegram/sessions");
 const input = require("input");
 const { NewMessage } = require("telegram/events");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// Configuration
+require("dotenv").config();
+
+// Main configuration
 const CONFIG = {
   telegram: {
-    apiId: 25871754,
-    apiHash: "d61fca1e0b08e8c05c66194f0c1198c2",
-    phoneNumber: "+923144254044",
+    apiId: Number(process.env.TELEGRAM_API_ID),
+    apiHash: process.env.TELEGRAM_API_HASH,
+    phoneNumber: process.env.TELEGRAM_PHONE_NUMBER,
     session: new StringSession(""),
   },
   channels: {
-    source: [
-      BigInt("-1002375001807"), // Bot testing
-    ],
-    target: BigInt("-4690318011"),
+    source: [BigInt(process.env.SOURCE_CHANNEL_ID_1)],
+    target: BigInt(process.env.TARGET_CHANNEL_ID),
   },
-  heartbeatInterval: 300000, // 5 minutes
+  heartbeatInterval: 300000,
+  keywords: ["crypto", "bitcoin", "eth"],
+  prompt:
+    "Please rewrite this message in a different way while keeping the same meaning. and only provide exact one message that I can forward to my group.",
 };
 
-// Utility functions
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function main() {
+  // Initialize AI model
+  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
-const logger = {
-  info: (...args) => console.log(...args),
-  error: (...args) => console.error(...args),
-  divider: () => console.log("\n------------------------"),
-};
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// Channel management functions
-async function getChannelInfo(client, channelId) {
-  try {
-    const entity = await client.getEntity(channelId);
-    logger.info("Channel found:", {
-      id: entity.id.toString(),
-      title: entity.title,
-      isChannel: entity.className === "Channel",
-    });
-    return entity;
-  } catch (err) {
-    logger.error(`Failed to get channel info for ${channelId}:`, err.message);
-    return null;
-  }
-}
-
-async function listAllChannels(client) {
-  try {
-    const dialogs = await client.getDialogs();
-    console.log("\nAvailable channels/chats:");
-    dialogs.forEach((dialog) => {
-      if (dialog.isChannel) {
-        console.log({
-          title: dialog.title,
-          id: dialog.id.toString(),
-          isChannel: dialog.isChannel,
-        });
-      }
-    });
-  } catch (err) {
-    console.error("Error fetching dialogs:", err);
-  }
-}
-
-// Message handling
-async function forwardMessage(client, message, sender) {
-  try {
-    await client.forwardMessages(CONFIG.channels.target, {
-      messages: [message.id],
-      fromPeer: message.peerId,
-    });
-    return true;
-  } catch (forwardError) {
-    logger.error("Forward failed, attempting to send as new message");
-    return await sendAsNewMessage(client, message, sender);
-  }
-}
-
-async function sendAsNewMessage(client, message, sender) {
-  try {
-    const messageText = `
-🔄 Forwarded from: ${message.chat.title}
-👤 Original sender: ${sender?.firstName || "Unknown"}
-📝 Message:
-${message.text}`;
-
-    await client.sendMessage(CONFIG.channels.target, {
-      message: messageText,
-      ...(message.media && { media: message.media }),
-    });
-    return true;
-  } catch (err) {
-    logger.error("Failed to send as new message:", err.message);
-    return false;
-  }
-}
-
-// Client setup and initialization
-async function initializeClient() {
+  // Initialize client
+  console.log("Starting Telegram client...");
   const client = new TelegramClient(
     CONFIG.telegram.session,
     CONFIG.telegram.apiId,
@@ -105,87 +39,77 @@ async function initializeClient() {
     { connectionRetries: 5 }
   );
 
+  // Start client with authentication
   await client.start({
     phoneNumber: async () => CONFIG.telegram.phoneNumber,
     password: async () => await input.text("Password: "),
     phoneCode: async () => await input.text("Code: "),
-    onError: (err) => logger.error(err),
+    onError: (err) => console.error(err),
   });
 
-  const savedSession = client.session.save();
-  logger.info("Session string:", savedSession);
+  // Save session string
+  console.log("Session string:", client.session.save());
 
-  return client;
-}
-
-async function setupMessageHandler(client, validChannels) {
+  // Set up message handler
   client.addEventHandler(async (event) => {
     const message = event.message;
-    try {
-      const sender = await message.getSender();
 
-      logger.divider();
-      logger.info("New message:", {
-        channel: message.chat?.title || "Unknown",
-        sender: sender?.firstName || "Unknown",
+    try {
+      // Log new message
+      console.log("\n------------------------");
+      console.log("New message received:", {
         message: message.text,
         date: new Date(message.date * 1000).toLocaleString(),
-        mediaType: message.media?.className,
       });
 
-      await delay(1000);
-      const success = await forwardMessage(client, message, sender);
-      logger.info(
-        success ? "Message handled successfully" : "Failed to handle message"
-      );
-      logger.divider();
+      // Check keywords
+      const hasKeyword =
+        message.text &&
+        CONFIG.keywords.some((keyword) =>
+          message.text.toLowerCase().includes(keyword.toLowerCase())
+        );
+
+      if (!hasKeyword) {
+        console.log("Message filtered: No matching keywords");
+        return;
+      }
+
+      // Generate modified message using AI
+      try {
+        const result = await model.generateContent(
+          `Original message: "${message.text}" "${CONFIG.prompt}"`
+        );
+        const modifiedText = await result.response.text();
+
+        // Send modified message
+        await client.sendMessage(CONFIG.channels.target, {
+          message: modifiedText,
+          ...(message.media && { media: message.media }),
+        });
+        console.log("Message forwarded successfully");
+      } catch (err) {
+        console.error("Error processing message:", err.message);
+      }
+
+      console.log("------------------------");
     } catch (err) {
-      logger.error("Error processing message:", err);
+      console.error("Error handling message:", err);
     }
-  }, new NewMessage({ chats: validChannels }));
-}
+  }, new NewMessage({ chats: CONFIG.channels.source }));
 
-// Main execution
-async function main() {
-  logger.info("Starting Telegram client...");
-  const client = await initializeClient();
+  // Log startup status
+  console.log("\nBot is running...");
+  console.log("Monitoring source channels for keywords:", CONFIG.keywords);
+  console.log("Press Ctrl+C to stop.");
 
-  await listAllChannels(client);
-
-  const validChannels = [];
-  for (const channel of CONFIG.channels.source) {
-    const channelInfo = await getChannelInfo(client, channel);
-    if (channelInfo) validChannels.push(channel);
-  }
-
-  if (validChannels.length === 0) {
-    throw new Error("No valid channels found");
-  }
-
-  const targetChannel = await getChannelInfo(client, CONFIG.channels.target);
-  if (!targetChannel) {
-    throw new Error("Cannot access target channel");
-  }
-
-  await setupMessageHandler(client, validChannels);
-
-  logger.info(`\nMonitoring ${validChannels.length} channels...`);
-  logger.info(`Forwarding to: ${targetChannel.title}`);
-  logger.info("\nListening for messages... Press Ctrl+C to stop.");
-
+  // Heartbeat
   setInterval(() => {
-    logger.info("Still listening...", new Date().toLocaleString());
+    console.log("Still running...", new Date().toLocaleString());
   }, CONFIG.heartbeatInterval);
 
   // Keep alive
   await new Promise(() => {});
 }
 
-// Error handling
-process.on("unhandledRejection", (err) => {
-  logger.error("Unhandled promise rejection:", err);
-});
-
-main().catch((err) => {
-  logger.error("Unexpected error:", err);
-});
+// Start the bot
+main().catch((err) => console.error("Fatal error:", err));

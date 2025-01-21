@@ -2,6 +2,7 @@ const { TelegramClient } = require("telegram");
 const { StringSession } = require("telegram/sessions");
 const input = require("input");
 const { NewMessage } = require("telegram/events");
+const { Api } = require("telegram");
 
 require("dotenv").config();
 
@@ -52,11 +53,28 @@ async function main() {
         new Date(message.date * 1000).toLocaleString()
       );
 
-      // Forward message to target channel using forwardMessages
+      // Temporarily disable forward restriction
+      await client.invoke(
+        new Api.messages.ToggleNoForwards({
+          peer: await client.getInputEntity(message.peerId),
+          enabled: false,
+        })
+      );
+
+      // Forward message to target channel
       await client.forwardMessages(CONFIG.channels.target, {
         messages: message.id,
         fromPeer: message.peerId,
       });
+
+      // Re-enable forward restriction
+      await client.invoke(
+        new Api.messages.ToggleNoForwards({
+          peer: await client.getInputEntity(message.peerId),
+          enabled: true,
+        })
+      );
+
       console.log("Message forwarded successfully");
       console.log("------------------------");
     } catch (err) {

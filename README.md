@@ -49,6 +49,28 @@ npm start
    - Visit https://makersuite.google.com/app/apikey
    - Create a new API key
 
+## Authentication
+
+There are two ways to authenticate with Telegram:
+
+### 1. Interactive Login (First Time Setup)
+
+When you run the bot for the first time without a session string:
+
+1. Enter your phone number
+2. Input the verification code sent to your Telegram
+3. Enter your 2FA password if enabled
+4. The bot will display a session string - save this for future use
+
+### 2. Session String Authentication (Recommended)
+
+To avoid entering codes and passwords every time:
+
+1. After your first successful login, copy the session string that is displayed
+2. Add it to your `.env` file as `TELEGRAM_SESSION=your_session_string`
+3. **Important**: The session string might contain whitespace - use [this tool](https://www.browserling.com/tools/remove-all-whitespace) to remove any whitespace before adding it to `.env`
+4. Make sure the session string is on a single line in the `.env` file
+
 ## Usage
 
 1. Start the bot:
@@ -57,10 +79,9 @@ npm start
 npm start
 ```
 
-2. First time setup:
-   - Enter your phone number
-   - Input the verification code sent to your Telegram
-   - Optionally enter your 2FA password if enabled
+2. Authentication:
+   - If you have a valid session string in `.env`, the bot will connect automatically
+   - If no session string is present, follow the interactive login steps
    - **Important**: Ensure you are:
      - A member of all source channels you want to monitor
      - An administrator in the target channel where messages will be forwarded
